@@ -105,13 +105,11 @@ streams:
     transformations: []
     incremental_sync:
       type: DatetimeBasedCursor
-      step: P1D
       cursor_field: Day
       end_datetime: "{{ config.get('end_date') or now_utc().strftime('%Y-%m-%d') }}"
       start_datetime: "{{ config['start_date'] }}"
       datetime_format: "%Y-%m-%d"
       lookback_window: P3D
-      cursor_granularity: P1D
       cursor_datetime_formats:
         - "%Y-%m-%d"
 
@@ -169,7 +167,7 @@ metadata:
     ad_spend_daily:
       isStale: false
       hasRecords: true
-      streamHash: 11da99c77859634c5de3edc7ab771f056684ef86
+      streamHash: 93bd5c50af7f258c6002a36a70affaf32e85c9da
       hasResponse: true
       primaryKeysAreUnique: true
       primaryKeysArePresent: true
