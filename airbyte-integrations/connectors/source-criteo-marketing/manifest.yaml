@@ -27,9 +27,15 @@ streams:
           type: RequestBodyJsonObject
           value:
             format: json
+            endDate: >-
+              {{ stream_interval.end_time if stream_interval is defined else
+              (config.get('end_date') or now_utc().strftime('%Y-%m-%d')) }}
             metrics:
               - AdvertiserCost
             currency: "{{ config.currency }}"
+            startDate: >-
+              {{ stream_interval.start_time if stream_interval is defined else
+              config['start_date'] }}
             dimensions:
               - day
               - AdvertiserId
@@ -47,9 +53,6 @@ streams:
           refresh_token_name: refresh_token
           use_profile_assertion: false
           token_refresh_endpoint: https://api.criteo.com/oauth2/token
-          token_expiry_date: ""
-          token_expiry_date_format: ""
-          refresh_token_error_key: ""
         error_handler:
           type: DefaultErrorHandler
           max_retries: 5
@@ -71,11 +74,13 @@ streams:
       schema:
         type: object
         $schema: http://json-schema.org/schema#
+        required:
+          - AdvertiserId
+          - CampaignId
+          - Day
         properties:
           Day:
-            type:
-              - string
-              - "null"
+            type: string
           Campaign:
             type:
               - string
@@ -89,13 +94,9 @@ streams:
               - string
               - "null"
           CampaignId:
-            type:
-              - string
-              - "null"
+            type: string
           AdvertiserId:
-            type:
-              - string
-              - "null"
+            type: string
           AdvertiserCost:
             type:
               - string
@@ -106,25 +107,13 @@ streams:
       type: DatetimeBasedCursor
       step: P1D
       cursor_field: Day
-      end_datetime: "{{ now_utc().strftime('%Y-%m-%d') }}"
+      end_datetime: "{{ config.get('end_date') or now_utc().strftime('%Y-%m-%d') }}"
       start_datetime: "{{ config['start_date'] }}"
       datetime_format: "%Y-%m-%d"
-      end_time_option:
-        type: RequestOption
-        field_path:
-          - endDate
-        inject_into: body_json
       lookback_window: P3D
-      start_time_option:
-        type: RequestOption
-        field_path:
-          - startDate
-        inject_into: body_json
       cursor_granularity: P1D
       cursor_datetime_formats:
         - "%Y-%m-%d"
-      partition_field_end: ""
-      partition_field_start: ""
 
 spec:
   type: Spec
@@ -136,7 +125,6 @@ spec:
       - client_id
       - client_secret
       - start_date
-      - end_date
       - currency
     properties:
       currency:
@@ -181,7 +169,7 @@ metadata:
     ad_spend_daily:
       isStale: false
       hasRecords: true
-      streamHash: 8c2ae55afbd458cfb0fa308ec4ee9abe47f2f2c5
+      streamHash: 11da99c77859634c5de3edc7ab771f056684ef86
       hasResponse: true
       primaryKeysAreUnique: true
       primaryKeysArePresent: true
