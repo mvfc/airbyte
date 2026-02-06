@@ -11,6 +11,49 @@ check:
   type: CheckStream
   stream_names:
     - ad_spend_daily
+  dynamic_streams_check_configs: []
+
+definitions:
+  linked:
+    HttpRequester:
+      request_body:
+        type: RequestBodyJsonObject
+        value:
+          format: json
+          endDate: >-
+            {{ stream_interval.end_time if stream_interval is defined else
+            (config.get('end_date') or now_utc().strftime('%Y-%m-%d')) }}
+          metrics:
+            - AdvertiserCost
+          currency: "{{ config.currency }}"
+          startDate: >-
+            {{ stream_interval.start_time if stream_interval is defined else
+            config['start_date'] }}
+          dimensions:
+            - day
+            - AdvertiserId
+            - CampaignId
+            - AdSetId
+      authenticator:
+        type: OAuthAuthenticator
+        client_id: "{{ config[\"client_id\"] }}"
+        grant_type: client_credentials
+        client_secret: "{{ config[\"client_secret\"] }}"
+        client_id_name: client_id
+        expires_in_name: expires_in
+        grant_type_name: grant_type
+        access_token_name: access_token
+        client_secret_name: client_secret
+        refresh_token_name: refresh_token
+        use_profile_assertion: false
+        token_refresh_endpoint: https://api.criteo.com/oauth2/token
+      error_handler:
+        type: DefaultErrorHandler
+        max_retries: 5
+        backoff_strategies:
+          - type: ExponentialBackoffStrategy
+            factor: 3
+    DeclarativeStream: {}
 
 streams:
   - type: DeclarativeStream
@@ -24,22 +67,7 @@ streams:
         url: https://api.criteo.com/2025-10/statistics/report
         http_method: POST
         request_body:
-          type: RequestBodyJsonObject
-          value:
-            format: json
-            endDate: >-
-              {{ stream_interval.end_time if stream_interval is defined else
-              (config.get('end_date') or now_utc().strftime('%Y-%m-%d')) }}
-            metrics:
-              - AdvertiserCost
-            currency: "{{ config.currency }}"
-            startDate: >-
-              {{ stream_interval.start_time if stream_interval is defined else
-              config['start_date'] }}
-            dimensions:
-              - day
-              - AdvertiserId
-              - CampaignId
+          $ref: "#/definitions/linked/HttpRequester/request_body"
         authenticator:
           type: OAuthAuthenticator
           client_id: "{{ config[\"client_id\"] }}"
@@ -47,18 +75,13 @@ streams:
           client_secret: "{{ config[\"client_secret\"] }}"
           client_id_name: client_id
           expires_in_name: expires_in
-          grant_type_name: grant_type
           access_token_name: access_token
           client_secret_name: client_secret
           refresh_token_name: refresh_token
           use_profile_assertion: false
           token_refresh_endpoint: https://api.criteo.com/oauth2/token
         error_handler:
-          type: DefaultErrorHandler
-          max_retries: 5
-          backoff_strategies:
-            - type: ExponentialBackoffStrategy
-              factor: 5
+          $ref: "#/definitions/linked/HttpRequester/error_handler"
       record_selector:
         type: RecordSelector
         extractor:
@@ -112,6 +135,269 @@ streams:
       lookback_window: P3D
       cursor_datetime_formats:
         - "%Y-%m-%d"
+  - type: DeclarativeStream
+    retriever:
+      type: SimpleRetriever
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
+      requester:
+        type: HttpRequester
+        http_method: POST
+        url: https://api.criteo.com/2026-01/marketing-solutions/ad-sets/search
+        authenticator:
+          type: OAuthAuthenticator
+          client_id: "{{ config[\"client_id\"] }}"
+          grant_type: client_credentials
+          client_secret: "{{ config[\"client_secret\"] }}"
+          client_id_name: client_id
+          expires_in_name: expires_in
+          grant_type_name: grant_type
+          access_token_name: access_token
+          client_secret_name: client_secret
+          refresh_token_name: refresh_token
+          use_profile_assertion: false
+          token_refresh_endpoint: https://api.criteo.com/oauth2/token
+        error_handler:
+          type: DefaultErrorHandler
+          max_retries: 5
+          backoff_strategies:
+            - type: ExponentialBackoffStrategy
+              factor: 2
+        request_body:
+          type: RequestBodyJsonObject
+          value:
+            filters:
+              adSetIds:
+                - "{{ stream_interval['AdsetId'] }}"
+      decoder:
+        type: JsonDecoder
+      partition_router:
+        type: SubstreamPartitionRouter
+        parent_stream_configs:
+          - type: ParentStreamConfig
+            stream:
+              $ref: "#/streams/0"
+            parent_key: AdsetId
+            partition_field: AdsetId
+            lazy_read_pointer: []
+    name: adsets
+    primary_key: id
+    schema_loader:
+      type: InlineSchemaLoader
+      schema:
+        type: object
+        $schema: http://json-schema.org/schema#
+        properties:
+          type:
+            type:
+              - string
+              - "null"
+          id:
+            type: string
+          attributes:
+            type:
+              - object
+              - "null"
+            properties:
+              name:
+                type:
+                  - string
+                  - "null"
+              advertiserId:
+                type:
+                  - string
+                  - "null"
+              datasetId:
+                type:
+                  - string
+                  - "null"
+              campaignId:
+                type:
+                  - string
+                  - "null"
+              destinationEnvironment:
+                type:
+                  - string
+                  - "null"
+              objective:
+                type:
+                  - string
+                  - "null"
+              schedule:
+                type:
+                  - object
+                  - "null"
+                properties:
+                  startDate:
+                    type:
+                      - object
+                      - "null"
+                    properties:
+                      value:
+                        type:
+                          - string
+                          - "null"
+                  endDate:
+                    type:
+                      - object
+                      - "null"
+                    properties: {}
+                  activationStatus:
+                    type:
+                      - string
+                      - "null"
+                  deliveryStatus:
+                    type:
+                      - string
+                      - "null"
+              bidding:
+                type:
+                  - object
+                  - "null"
+                properties:
+                  bidAmount:
+                    type:
+                      - number
+                      - "null"
+                  costController:
+                    type:
+                      - string
+                      - "null"
+              targeting:
+                type:
+                  - object
+                  - "null"
+                properties:
+                  deliveryLimitations:
+                    type:
+                      - object
+                      - "null"
+                    properties:
+                      environments:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type:
+                            - string
+                            - "null"
+                      devices:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type:
+                            - string
+                            - "null"
+                      operatingSystems:
+                        type:
+                          - array
+                          - "null"
+                        items:
+                          type:
+                            - string
+                            - "null"
+                  geoLocation:
+                    type:
+                      - object
+                      - "null"
+                    properties:
+                      countries:
+                        type:
+                          - object
+                          - "null"
+                        properties:
+                          value:
+                            type:
+                              - object
+                              - "null"
+                            properties:
+                              operand:
+                                type:
+                                  - string
+                                  - "null"
+                              values:
+                                type:
+                                  - array
+                                  - "null"
+                                items:
+                                  type:
+                                    - string
+                                    - "null"
+                      subdivisions:
+                        type:
+                          - object
+                          - "null"
+                        properties: {}
+                      zipCodes:
+                        type:
+                          - object
+                          - "null"
+                        properties: {}
+                  frequencyCapping:
+                    type:
+                      - object
+                      - "null"
+                    properties:
+                      value:
+                        type:
+                          - object
+                          - "null"
+                        properties:
+                          frequency:
+                            type:
+                              - string
+                              - "null"
+                          maximumImpressions:
+                            type:
+                              - number
+                              - "null"
+              budget:
+                type:
+                  - object
+                  - "null"
+                properties:
+                  budgetStrategy:
+                    type:
+                      - string
+                      - "null"
+                  budgetRenewal:
+                    type:
+                      - string
+                      - "null"
+                  budgetDeliverySmoothing:
+                    type:
+                      - string
+                      - "null"
+                  budgetDeliveryWeek:
+                    type:
+                      - string
+                      - "null"
+                  budgetAmount:
+                    type:
+                      - number
+                      - "null"
+              mediaType:
+                type:
+                  - string
+                  - "null"
+              attributionConfiguration:
+                type:
+                  - object
+                  - "null"
+                properties:
+                  attributionMethod:
+                    type:
+                      - string
+                      - "null"
+        required:
+          - id
+        additionalProperties: true
+    transformations: []
 
 spec:
   type: Spec
@@ -167,13 +453,22 @@ metadata:
     ad_spend_daily:
       isStale: false
       hasRecords: true
-      streamHash: 93bd5c50af7f258c6002a36a70affaf32e85c9da
+      streamHash: 84f34f1362f54855e2e27f9230b5e02e471d062e
+      hasResponse: true
+      primaryKeysAreUnique: true
+      primaryKeysArePresent: true
+      responsesAreSuccessful: true
+    adsets:
+      isStale: false
+      hasRecords: true
+      streamHash: cdc7cf9e13123395a07de004dbb503b56aac0479
       hasResponse: true
       primaryKeysAreUnique: true
       primaryKeysArePresent: true
       responsesAreSuccessful: true
   autoImportSchema:
     ad_spend_daily: false
+    adsets: true
 
 api_budget:
   type: HTTPAPIBudget
