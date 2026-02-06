@@ -17,6 +17,7 @@ https://developers.criteo.com/marketing-solutions/reference/getadsetreport
 | Stream Name | Primary Key | Pagination | Supports Full Sync | Supports Incremental |
 |-------------|-------------|------------|---------------------|----------------------|
 | ad_spend_daily | AdvertiserId.CampaignId.Day | No pagination | ✅ |  ✅  |
+| adsets | Id | No pagination | ✅ |  ❌  |
 
 ## Changelog
 
