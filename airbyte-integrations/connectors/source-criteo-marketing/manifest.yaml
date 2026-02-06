@@ -136,18 +136,20 @@ streams:
       cursor_datetime_formats:
         - "%Y-%m-%d"
   - type: DeclarativeStream
+    name: adsets
     retriever:
       type: SimpleRetriever
-      record_selector:
-        type: RecordSelector
-        extractor:
-          type: DpathExtractor
-          field_path:
-            - data
+      decoder:
+        type: JsonDecoder
       requester:
         type: HttpRequester
-        http_method: POST
         url: https://api.criteo.com/2026-01/marketing-solutions/ad-sets/search
+        http_method: POST
+        request_body:
+          type: RequestBodyJsonObject
+          value:
+            filters:
+              adSetIds: "{{ stream_slice['AdsetId'] }}"
         authenticator:
           type: OAuthAuthenticator
           client_id: "{{ config[\"client_id\"] }}"
@@ -167,24 +169,25 @@ streams:
           backoff_strategies:
             - type: ExponentialBackoffStrategy
               factor: 2
-        request_body:
-          type: RequestBodyJsonObject
-          value:
-            filters:
-              adSetIds:
-                - "{{ stream_interval['AdsetId'] }}"
-      decoder:
-        type: JsonDecoder
+      record_selector:
+        type: RecordSelector
+        extractor:
+          type: DpathExtractor
+          field_path:
+            - data
       partition_router:
-        type: SubstreamPartitionRouter
-        parent_stream_configs:
-          - type: ParentStreamConfig
-            stream:
-              $ref: "#/streams/0"
-            parent_key: AdsetId
-            partition_field: AdsetId
-            lazy_read_pointer: []
-    name: adsets
+        type: GroupingPartitionRouter
+        group_size: 50
+        underlying_partition_router:
+          type: SubstreamPartitionRouter
+          parent_stream_configs:
+            - type: ParentStreamConfig
+              stream:
+                $ref: "#/streams/0"
+              parent_key: AdsetId
+              partition_field: AdsetId
+              lazy_read_pointer: []
+        deduplicate: true
     primary_key: id
     schema_loader:
       type: InlineSchemaLoader
@@ -332,7 +335,24 @@ streams:
                         type:
                           - object
                           - "null"
-                        properties: {}
+                        properties:
+                          value:
+                            type:
+                              - object
+                              - "null"
+                            properties:
+                              operand:
+                                type:
+                                  - string
+                                  - "null"
+                              values:
+                                type:
+                                  - array
+                                  - "null"
+                                items:
+                                  type:
+                                    - string
+                                    - "null"
                       zipCodes:
                         type:
                           - object
@@ -411,23 +431,17 @@ spec:
       - start_date
       - currency
     properties:
-      currency:
-        type: string
-        description: Currency to be used on the report
-        order: 4
-        title: Currency
-      end_date:
-        type: string
-        description: End date of the report
-        order: 3
-        title: EndDate
-        format: date
-        pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}$
       client_id:
         type: string
         name: client_id
         order: 0
         title: OAuth Client ID
+        airbyte_secret: true
+      client_secret:
+        type: string
+        name: client_secret
+        order: 1
+        title: OAuth Client Secret
         airbyte_secret: true
       start_date:
         type: string
@@ -436,12 +450,18 @@ spec:
         title: StartDate
         format: date
         pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}$
-      client_secret:
+      end_date:
         type: string
-        name: client_secret
-        order: 1
-        title: OAuth Client Secret
-        airbyte_secret: true
+        description: End date of the report
+        order: 3
+        title: EndDate
+        format: date
+        pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}$
+      currency:
+        type: string
+        description: Currency to be used on the report
+        order: 4
+        title: Currency
     additionalProperties: true
 
 metadata:
@@ -450,6 +470,14 @@ metadata:
     openapiSpecUrl: >-
       https://api.criteo.com/2025-10/marketingsolutions/open-api-specifications.json
   testedStreams:
+    adsets:
+      isStale: false
+      hasRecords: true
+      streamHash: e46973afa9cbc8c4412163c39369f64239e2cee4
+      hasResponse: true
+      primaryKeysAreUnique: true
+      primaryKeysArePresent: true
+      responsesAreSuccessful: true
     ad_spend_daily:
       isStale: false
       hasRecords: true
@@ -458,17 +486,9 @@ metadata:
       primaryKeysAreUnique: true
       primaryKeysArePresent: true
       responsesAreSuccessful: true
-    adsets:
-      isStale: false
-      hasRecords: true
-      streamHash: cdc7cf9e13123395a07de004dbb503b56aac0479
-      hasResponse: true
-      primaryKeysAreUnique: true
-      primaryKeysArePresent: true
-      responsesAreSuccessful: true
   autoImportSchema:
-    ad_spend_daily: false
     adsets: true
+    ad_spend_daily: false
 
 api_budget:
   type: HTTPAPIBudget
